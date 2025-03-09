@@ -9,10 +9,8 @@ pipeline {
         stage('Setup') {
             steps {
                 sh '''
-                    python3 -m venv $VENV_DIR
-                    source $VENV_DIR/bin/activate
-                    pip install --upgrade pip
-                    pip install -r services/data-collector-service/requirements.txt
+                    python3 -m venv ${VENV_DIR}
+                    . ${VENV_DIR}/bin/activate && pip install --upgrade pip && pip install -r services/data-collector-service/requirements.txt
                     mkdir -p reports
                 '''
             }
@@ -20,7 +18,7 @@ pipeline {
         stage('Run Tests') {
             steps {
                 sh '''
-                    source $VENV_DIR/bin/activate
+                    source ${VENV_DIR}/bin/activate
                     pytest services/data-collector-service/tests/ \
                      --disable-warnings \
                      --junitxml=reports/data-collector-service-results.xml
