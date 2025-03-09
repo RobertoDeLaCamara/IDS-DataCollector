@@ -18,10 +18,8 @@ pipeline {
         stage('Run Tests') {
             steps {
                 sh '''
-                    source ${VENV_DIR}/bin/activate
-                    pytest services/data-collector-service/tests/ \
-                     --disable-warnings \
-                     --junitxml=reports/data-collector-service-results.xml
+                    . ${VENV_DIR}/bin/activate && pip install pytest 
+                    pytest services/data-collector-service/tests/ --disable-warnings --junitxml=reports/data-collector-service-results.xml
                 '''
             }
         }
