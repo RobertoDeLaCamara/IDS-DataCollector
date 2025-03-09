@@ -287,12 +287,12 @@ def main():
                         help="Max number of rotated capture files to keep")
 
     # Manual export argument
-    parser.add_argument("--export-file", default="../data/capturas.parquet",
-                        help="File path for 'export' command (default ../data/capturas.parquet)")
+    parser.add_argument("--export-file", default="../data/captures.parquet",
+                        help="File path for 'export' command (default ../data/captures.parquet)")
 
     # Config file argument
     parser.add_argument("--config-file", default=DEFAULT_CONFIG_PATH,
-                        help="Path to config file (default ../config/daemon_config.ini)")
+                        help="Path to config file (default ../config/server_config.ini)")
 
     args = parser.parse_args()
 
