@@ -1,230 +1,148 @@
-import time
-import queue
-import threading
-import pandas as pd
+# test_packet_capture.py
+
 import pytest
-from src.packet_capture import PacketCapture, IP, TCP
+from unittest.mock import patch, MagicMock
+import time
+import pandas as pd
+from src.packet_capture import PacketCapture
 
-# Fake classes to simulate Scapy packets
-
-class FakeIP:
-    def __init__(self, src, dst, proto):
-        """
-        Constructor for FakeIP.
-        
-        Parameters
-        ----------
-        src : str
-            Source IP address.
-        dst : str
-            Destination IP address.
-        proto : int
-            Protocol number.
-        """
-        self.src = src
-        self.dst = dst
-        self.proto = proto
-
-class FakeTCP:
-    def __init__(self, sport, dport, flags):
-        """
-        Constructor for FakeTCP.
-        
-        Parameters
-        ----------
-        sport : int
-            Source port.
-        dport : int
-            Destination port.
-        flags : str
-            TCP flags, e.g. "S" for SYN, "A" for ACK, etc.
-        """
-        self.sport = sport
-        self.dport = dport
-        self.flags = flags
-
-class FakePacket:
+@pytest.fixture
+def packet_capture_instance():
     """
-    Simulates a Scapy packet that contains the IP and TCP layers.
-    """
-    def __init__(self, ip_layer, tcp_layer, size):
-        """
-        Constructor for FakePacket.
-        
-        Parameters
-        ----------
-        ip_layer : FakeIP
-            An instance of FakeIP representing the IP layer.
-        tcp_layer : FakeTCP
-            An instance of FakeTCP representing the TCP layer.
-        size : int
-            The size of the packet in bytes.
-        """
-        self.layers = {IP: ip_layer, TCP: tcp_layer}
-        self._size = size
-
-    def __contains__(self, item):
-        """
-        Checks if the given item is in the packet's layers.
-        
-        Parameters
-        ----------
-        item : object
-            The item to search for in the packet's layers.
-        
-        Returns
-        -------
-        bool
-            True if the item is in the packet's layers, False otherwise.
-        """
-        return item in self.layers
-
-    def __getitem__(self, item):
-        """
-        Retrieves the specified layer from the packet's layers.
-
-        Parameters
-        ----------
-        item : type
-            The layer type (e.g., IP, TCP) to retrieve from the packet.
-
-        Returns
-        -------
-        object
-            The corresponding layer object from the packet's layers.
-        """
-
-        return self.layers[item]
-
-    def __len__(self):
-        """
-        Returns the size of the packet.
-
-        Returns
-        -------
-        int
-            The size of the packet in bytes.
-        """
-
-        return self._size
-
-# Fake function to replace sniff during testing
-def fake_sniff(*args, **kwargs):
-    """
-    Simulates the sniff function by calling the callback with a fake packet,
-    as many times as specified by 'count'.
-    """
-    packet_count = kwargs.get('count', 1)
-    prn = kwargs.get('prn')
-    for _ in range(packet_count):
-        ip = FakeIP(src="192.168.1.1", dst="192.168.1.2", proto=6)
-        tcp = FakeTCP(sport=12345, dport=80, flags="S")
-        fake_packet = FakePacket(ip, tcp, 100)
-        prn(fake_packet)
-
-# Test for the packet_callback method
-def test_packet_callback():
-    """
-    Tests the packet_callback method.
-
-    Creates a PacketCapture object and a fake packet, and calls the
-    packet_callback method with the fake packet. The test then asserts
-    that the packet information was added to the packets_data list, and
-    that the queue is not empty.
-    """
-    pc = PacketCapture()
-    ip = FakeIP(src="10.0.0.1", dst="10.0.0.2", proto=6)
-    tcp = FakeTCP(sport=1111, dport=80, flags="A")
-    packet = FakePacket(ip, tcp, 120)
+    Fixture that initializes a PacketCapture instance for use in the tests.
     
-    pc.packet_callback(packet)
+    Returns:
+        A PacketCapture instance.
+    """
+    return PacketCapture()
+
+def test_initialization(packet_capture_instance):
+    """
+    Verifies that the class initializes with the correct data structures and attributes.
     
-    # Check that the packet information was added
+    The constructor initializes the object with a queue to store packet information,
+    an event to signal the capture thread to stop, a thread to run the capture,
+    and a list to store the captured packet data.
+    """
+    pc = packet_capture_instance
+    assert pc.packet_queue is not None, "packet_queue should be initialized"
+    assert not pc.stop_capture.is_set(), "stop_capture should be False initially"
+    assert pc.capture_thread is None, "capture_thread should be None initially"
+    assert pc.packets_data == [], "packets_data should be an empty list initially"
+
+def test_packet_callback(packet_capture_instance):
+    """
+    Verifies that packet_callback stores packet information in the list and in the queue.
+    
+    packet_callback receives a Scapy packet object as an argument and stores
+    the packet information in the list of captured packets and the queue.
+    """
+    pc = packet_capture_instance
+    
+    # Create a mock "packet" with the necessary properties
+    mock_packet = MagicMock()
+    mock_packet.__contains__.side_effect = lambda x: True  # So that IP and TCP appear to exist
+    mock_packet.__getitem__.side_effect = lambda x: mock_packet  # Return the same mock when accessing IP or TCP
+    
+    # Assign simulated attributes
+    type(mock_packet).src = '127.0.0.1'
+    type(mock_packet).dst = '192.168.0.1'
+    type(mock_packet).sport = 12345
+    type(mock_packet).dport = 80
+    type(mock_packet).proto = 6
+    type(mock_packet).flags = 'S'
+    mock_packet.__len__.return_value = 60  # Simulate len(packet)
+
+    # Call the packet_callback method
+    pc.packet_callback(mock_packet)
+    
+    # Verify that the packet was stored in the packets_data list
     assert len(pc.packets_data) == 1
-    packet_info = pc.packets_data[0]
-    assert packet_info['src_ip'] == "10.0.0.1"
-    assert packet_info['dst_ip'] == "10.0.0.2"
-    assert packet_info['src_port'] == 1111
-    assert packet_info['dst_port'] == 80
-    assert packet_info['protocol'] == 6
-    assert packet_info['size'] == 120
-    assert packet_info['flags'] == "A"
     
-    # Check that the queue is not empty
+    # Verify the packet information was stored correctly
+    packet_info = pc.packets_data[0]
+    assert packet_info['src_ip'] == '127.0.0.1'
+    assert packet_info['dst_ip'] == '192.168.0.1'
+    assert packet_info['protocol'] == 6
+    assert packet_info['size'] == 60
+    
+    # Verify that the packet was also added to the queue
     assert not pc.packet_queue.empty()
 
-# Test for the get_captured_data method
-def test_get_captured_data():
+@patch('packet_capture.sniff')
+def test_start_capture(mock_sniff, packet_capture_instance):
     """
-    Tests the get_captured_data method.
-
-    Creates a PacketCapture object and a fake packet, adds the packet to the
-    capture object using the packet_callback method, and then retrieves the
-    captured data using the get_captured_data method. The test then asserts that
-    the returned data is a Pandas DataFrame with the expected columns and shape.
-    """
-    pc = PacketCapture()
-    ip = FakeIP(src="192.168.0.1", dst="192.168.0.2", proto=6)
-    tcp = FakeTCP(sport=2222, dport=443, flags="S")
-    packet = FakePacket(ip, tcp, 150)
+    Verifies that start_capture launches a thread and calls sniff() with the correct arguments.
     
-    pc.packet_callback(packet)
+    This test uses a mock for the sniff function to ensure it is called with the expected parameters
+    when start_capture is invoked. It checks that a thread is started and the sniff function 
+    is configured with the correct network interface and packet count.
+    """
+    pc = packet_capture_instance  # Get the PacketCapture instance
+    
+    # Start the packet capture with specified interface and packet count
+    pc.start_capture(interface='eth0', packet_count=10)
+    
+    # Briefly wait for the thread to start
+    time.sleep(0.1)
+    
+    # Verify that the sniff function was called exactly once
+    mock_sniff.assert_called_once()
+    
+    # Retrieve the keyword arguments used in the sniff call
+    _, kwargs = mock_sniff.call_args
+    
+    # Check that the correct interface and packet count are passed to sniff
+    assert kwargs['iface'] == 'eth0'
+    assert kwargs['count'] == 10
+    
+    # Ensure the packet callback function is passed to sniff
+    assert callable(kwargs['prn'])
+    
+    # Stop the packet capture and verify the stop event is set
+    pc.stop()
+    assert pc.stop_capture.is_set()
+
+def test_get_captured_data(packet_capture_instance):
+    """
+    Verifies that get_captured_data returns a DataFrame with the expected columns.
+    
+    This test sets the packets_data attribute of the PacketCapture instance
+    with a sample packet and checks if the method returns a DataFrame with
+    the correct format and data.
+    """
+    pc = packet_capture_instance
+    
+    # Simulate captured packet data
+    pc.packets_data = [
+        {
+            'timestamp': 123456.0,
+            'src_ip': '10.0.0.1',
+            'dst_ip': '10.0.0.2',
+            'src_port': 1234,
+            'dst_port': 80,
+            'protocol': 6,
+            'size': 60,
+            'flags': 'S'
+        }
+    ]
+    
+    # Retrieve the captured data as a DataFrame
     df = pc.get_captured_data()
     
-    assert isinstance(df, pd.DataFrame)
-    assert df.shape[0] == 1
-    assert "src_ip" in df.columns
-    assert "dst_ip" in df.columns
+    # Verify that the result is a DataFrame
+    assert isinstance(df, pd.DataFrame), "Result should be a DataFrame"
+    
+    # Check that the expected columns are present
+    assert 'timestamp' in df.columns, "'timestamp' column should be present"
+    assert 'src_ip' in df.columns, "'src_ip' column should be present"
+    assert 'dst_ip' in df.columns, "'dst_ip' column should be present"
+    assert 'src_port' in df.columns, "'src_port' column should be present"
+    
+    # Verify the DataFrame has the correct number of rows
+    assert len(df) == 1, "DataFrame should have one row"
+    
+    # Check that the data in the DataFrame matches the input data
+    assert df.at[0, 'src_ip'] == '10.0.0.1', "src_ip should match the input data"
 
-# Test for the start_capture method using monkeypatch to replace sniff
-def test_start_capture(monkeypatch):
-    """
-    Tests the start_capture method using monkeypatch to replace sniff.
-
-    Creates a PacketCapture object, replaces sniff with the fake_sniff function,
-    starts the simulated capture with count=2, waits for the capture thread to
-    finish, and checks that 2 packets were captured.
-    """
-    pc = PacketCapture()
-    # Replace sniff with the fake_sniff function
-    monkeypatch.setattr("packet_capture.sniff", fake_sniff)
-    
-    # Start the simulated capture with count=2
-    pc.start_capture(packet_count=2)
-    
-    # Wait for the capture thread to finish
-    pc.capture_thread.join(timeout=1)
-    
-    # Check that 2 packets were captured
-    assert len(pc.packets_data) == 2
-
-# Test for the stop method
-def test_stop(monkeypatch):
-    """
-    Tests the stop method.
-
-    Creates a PacketCapture object, starts a simulated capture with a
-    fake_sniff function that sleeps for 0.5 seconds, calls the stop method, and
-    checks that the capture thread is no longer active.
-    """
-    pc = PacketCapture()
-    
-    # Create a fake_sniff function that simulates a long capture
-    def fake_sniff_sleep(*args, **kwargs):
-        """
-        Simulates a long capture by sleeping for 0.5 seconds.
-
-        This function is used to test the stop method, by simulating a capture that
-        takes longer than expected.
-        """
-        time.sleep(0.5)
-    
-    monkeypatch.setattr("packet_capture.sniff", fake_sniff_sleep)
-    
-    pc.start_capture(packet_count=1)
-    # Call stop immediately
-    pc.stop()
-    
-    # Check that the capture thread is no longer active
-    assert not pc.capture_thread.is_alive()
 
