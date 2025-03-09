@@ -9,6 +9,7 @@ pipeline {
         stage('Setup') {
             steps {
                 sh '''
+                    export PYTHONPATH="${WORKSPACE}:${WORKSPACE}/services/data-collector-service"
                     python3 -m venv ${VENV_DIR}
                     . ${VENV_DIR}/bin/activate && pip install --upgrade pip && pip install -r services/data-collector-service/requirements.txt
                     mkdir -p reports
