@@ -10,7 +10,7 @@ pipeline {
             steps {
                 sh '''
                     python3 -m venv ${VENV_DIR}
-                    . ${VENV_DIR}/bin/activate && pip install --upgrade pip && pip install -r services/data-collector-service/requirements.txt
+                    . ${VENV_DIR}/bin/activate && pip install --upgrade pip && pip install -r requirements.txt
                     mkdir -p reports
 
                      # Ensure src/ is recognized as a Python package
@@ -24,7 +24,7 @@ pipeline {
             steps {
                 sh '''
                     . ${VENV_DIR}/bin/activate && pip install pytest 
-                    pytest services/data-collector-service/tests/ --disable-warnings --junitxml=reports/data-collector-service-results.xml
+                    pytest tests/ --disable-warnings --junitxml=reports/data-collector-service-results.xml
                 '''
             }
         }
