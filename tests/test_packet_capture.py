@@ -69,7 +69,9 @@ def test_packet_callback(packet_capture_instance):
     # Verify that the packet was also added to the queue
     assert not pc.packet_queue.empty()
 
-@patch('packet_capture.sniff')
+
+
+@patch('src.packet_capture.sniff')
 def test_start_capture(mock_sniff, packet_capture_instance):
     """
     Verifies that start_capture launches a thread and calls sniff() with the correct arguments.
