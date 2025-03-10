@@ -12,11 +12,6 @@ pipeline {
                     python3 -m venv ${VENV_DIR}
                     . ${VENV_DIR}/bin/activate && pip install --upgrade pip && pip install -r requirements.txt
                     mkdir -p reports
-
-                     # Ensure src/ is recognized as a Python package
-                    mkdir -p src
-                    touch src/__init__.py
-                    export PYTHONPATH=$(pwd)/src
                 '''
             }
         }
